@@ -19,9 +19,10 @@ struct dram_para {
 	u32 read_delays;
 	u32 write_delays;
 	u16 page_size;
-	u8 bus_width;
+	u8 bus_full_width;
 	u8 dual_rank;
 	u8 row_bits;
+	u8 bank_bits;
 };
 
 static inline int ns_to_t(int nanoseconds)
@@ -136,36 +137,77 @@ static void mctl_set_timing_params(struct dram_para *para)
 	struct sunxi_mctl_ctl_reg * const mctl_ctl =
 			(struct sunxi_mctl_ctl_reg *)SUNXI_DRAM_CTL0_BASE;
 
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u8 tccd		= 2;
+#else
+	u8 tccd		= 1;
+#endif
 	u8 tfaw		= ns_to_t(50);
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u8 trrd		= max(ns_to_t(10), 4);
 	u8 trcd		= ns_to_t(15);
 	u8 trc		= ns_to_t(53);
 	u8 txp		= max(ns_to_t(8), 3);
 	u8 twtr		= max(ns_to_t(8), 4);
 	u8 trtp		= max(ns_to_t(8), 4);
+#else
+	u8 trrd		= max(ns_to_t(10), 2);
+	u8 trcd		= ns_to_t(20);
+	u8 trc		= ns_to_t(65);
+	u8 txp		= 2;
+	u8 twtr		= max(ns_to_t(8), 2);
+	u8 trtp		= max(ns_to_t(8), 2);
+#endif
 	u8 twr		= max(ns_to_t(15), 3);
 	u8 trp		= ns_to_t(15);
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u8 tras		= ns_to_t(38);
+#else
+	u8 tras		= ns_to_t(45);
+#endif
 	u16 trefi	= ns_to_t(7800) / 32;
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u16 trfc	= ns_to_t(350);
+#else
+	u16 trfc	= ns_to_t(328);
+#endif
 
 	u8 tmrw		= 0;
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u8 tmrd		= 4;
+#else
+	u8 tmrd		= 2;
+#endif
 	u8 tmod		= 12;
 	u8 tcke		= 3;
 	u8 tcksrx	= 5;
 	u8 tcksre	= 5;
 	u8 tckesr	= 4;
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u8 trasmax	= 24;
+#else
+	u8 trasmax	= 27;
+#endif
 
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u8 tcl		= 6; /* CL 12 */
 	u8 tcwl		= 4; /* CWL 8 */
 	u8 t_rdata_en	= 4;
 	u8 wr_latency	= 2;
+#else
+	u8 tcl		= 3; /* CL 6 */
+	u8 tcwl		= 3; /* CWL 6 */
+	u8 t_rdata_en	= 1;
+	u8 wr_latency	= 1;
+#endif
 
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	u32 tdinit0	= (500 * CONFIG_DRAM_CLK) + 1;		/* 500us */
 	u32 tdinit1	= (360 * CONFIG_DRAM_CLK) / 1000 + 1;	/* 360ns */
+#else
+	u32 tdinit0	= (400 * CONFIG_DRAM_CLK) + 1;		/* 400us */
+	u32 tdinit1	= (500 * CONFIG_DRAM_CLK) / 1000 + 1;	/* 500ns */
+#endif
 	u32 tdinit2	= (200 * CONFIG_DRAM_CLK) + 1;		/* 200us */
 	u32 tdinit3	= (1 * CONFIG_DRAM_CLK) + 1;		/* 1us */
 
@@ -174,9 +216,15 @@ static void mctl_set_timing_params(struct dram_para *para)
 	u8 trd2wr	= tcl + 2 + 1 - tcwl;	/* RL + BL / 2 + 2 - WL */
 
 	/* set mode register */
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	writel(0x1c70, &mctl_ctl->mr[0]);	/* CL=11, WR=12 */
 	writel(0x40, &mctl_ctl->mr[1]);
 	writel(0x18, &mctl_ctl->mr[2]);		/* CWL=8 */
+#else
+	writel(0x263, &mctl_ctl->mr[0]);
+	writel(0x4, &mctl_ctl->mr[1]);
+	writel(0x0, &mctl_ctl->mr[2]);
+#endif
 	writel(0x0, &mctl_ctl->mr[3]);
 
 	/* set DRAM timing */
@@ -212,6 +260,12 @@ static void mctl_set_timing_params(struct dram_para *para)
 	writel(RFSHTMG_TREFI(trefi) | RFSHTMG_TRFC(trfc), &mctl_ctl->rfshtmg);
 }
 
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
+#define ZQ_COUNT 6
+#else
+#define ZQ_COUNT 4
+#endif
+
 static void mctl_zq_calibration(struct dram_para *para)
 {
 	struct sunxi_mctl_ctl_reg * const mctl_ctl =
@@ -244,7 +298,8 @@ static void mctl_zq_calibration(struct dram_para *para)
 
 		writel(0x0a0a0a0a, &mctl_ctl->zqdr[2]);
 
-		for (i = 0; i < 6; i++) {
+		for (i = 0; i < ZQ_COUNT; i++)
+		{
 			u8 zq = (CONFIG_DRAM_ZQ >> (i * 4)) & 0xf;
 
 			writel((zq << 20) | (zq << 16) | (zq << 12) |
@@ -266,7 +321,9 @@ static void mctl_zq_calibration(struct dram_para *para)
 
 		writel((zq_val[1] << 16) | zq_val[0], &mctl_ctl->zqdr[0]);
 		writel((zq_val[3] << 16) | zq_val[2], &mctl_ctl->zqdr[1]);
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 		writel((zq_val[5] << 16) | zq_val[4], &mctl_ctl->zqdr[2]);
+#endif
 	}
 }
 
@@ -275,8 +332,15 @@ static void mctl_set_cr(struct dram_para *para)
 	struct sunxi_mctl_com_reg * const mctl_com =
 			(struct sunxi_mctl_com_reg *)SUNXI_DRAM_COM_BASE;
 
-	writel(MCTL_CR_BL8 | MCTL_CR_2T | MCTL_CR_DDR3 | MCTL_CR_INTERLEAVED |
-	       MCTL_CR_EIGHT_BANKS | MCTL_CR_BUS_WIDTH(para->bus_width) |
+	writel(MCTL_CR_BL8 | MCTL_CR_2T |
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
+	       MCTL_CR_DDR3 |
+#else
+	       MCTL_CR_DDR2 |
+#endif
+	       (para->bank_bits == 3 ? MCTL_CR_EIGHT_BANKS : MCTL_CR_FOUR_BANKS) |
+	       MCTL_CR_BUS_FULL_WIDTH(para->bus_full_width) |
+	       MCTL_CR_INTERLEAVED |
 	       (para->dual_rank ? MCTL_CR_DUAL_RANK : MCTL_CR_SINGLE_RANK) |
 	       MCTL_CR_PAGE_SIZE(para->page_size) |
 	       MCTL_CR_ROW_BITS(para->row_bits), &mctl_com->cr);
@@ -363,7 +427,7 @@ static int mctl_channel_init(struct dram_para *para)
 			(0x1 << 10) | (0x2 << 8));
 
 	/* set half DQ */
-	if (para->bus_width != 32) {
+	if (!para->bus_full_width) {
 		writel(0x0, &mctl_ctl->datx[2].gcr);
 		writel(0x0, &mctl_ctl->datx[3].gcr);
 	}
@@ -380,7 +444,10 @@ static int mctl_channel_init(struct dram_para *para)
 
 	mctl_zq_calibration(para);
 
-	mctl_phy_init(PIR_PLLINIT | PIR_DCAL | PIR_PHYRST | PIR_DRAMRST |
+	mctl_phy_init(PIR_PLLINIT | PIR_DCAL | PIR_PHYRST |
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
+		      PIR_DRAMRST |
+#endif
 		      PIR_DRAMINIT | PIR_QSGATE);
 
 	/* detect ranks and bus width */
@@ -397,7 +464,7 @@ static int mctl_channel_init(struct dram_para *para)
 		    ((readl(&mctl_ctl->datx[3].gsr[0]) >> 24) & 0x1)) {
 			writel(0x0, &mctl_ctl->datx[2].gcr);
 			writel(0x0, &mctl_ctl->datx[3].gcr);
-			para->bus_width = 16;
+			para->bus_full_width = 0;
 		}
 
 		mctl_set_cr(para);
@@ -435,10 +502,20 @@ static void mctl_auto_detect_dram_size(struct dram_para *para)
 	/* detect row address bits */
 	para->page_size = 512;
 	para->row_bits = 16;
+	para->bank_bits = 2;
+
 	mctl_set_cr(para);
 
 	for (para->row_bits = 11; para->row_bits < 16; para->row_bits++)
-		if (mctl_mem_matches((1 << (para->row_bits + 3)) * para->page_size))
+		if (mctl_mem_matches((1 << (para->row_bits + para->bank_bits)) * para->page_size))
+			break;
+
+	/* detect bank address bits */
+	para->bank_bits = 3;
+	mctl_set_cr(para);
+
+	for (para->bank_bits = 2; para->bank_bits < 3; para->bank_bits++)
+		if (mctl_mem_matches((1 << para->bank_bits) * para->page_size))
 			break;
 
 	/* detect page size */
@@ -458,11 +535,17 @@ unsigned long sunxi_dram_init(void)
 			(struct sunxi_mctl_ctl_reg *)SUNXI_DRAM_CTL0_BASE;
 
 	struct dram_para para = {
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 		.read_delays = 0x00007979,	/* dram_tpr12 */
 		.write_delays = 0x6aaa0000,	/* dram_tpr11 */
+#else
+		.read_delays = 0x00007878,	/* dram_tpr12 */
+		.write_delays = 0x6a440000,	/* dram_tpr11 */
+#endif
 		.dual_rank = 0,
-		.bus_width = 32,
+		.bus_full_width = 1,
 		.row_bits = 15,
+		.bank_bits = 3,
 		.page_size = 4096,
 	};
 
@@ -477,7 +560,13 @@ unsigned long sunxi_dram_init(void)
 	udelay(1);
 
 	/* odt delay */
+#ifndef CONFIG_SUNXI_DW_DRAM_DDR2
 	writel(0x0c000400, &mctl_ctl->odtcfg);
+#else
+	writel(0x04000400, &mctl_ctl->odtcfg);
+
+	clrbits_le32(&mctl_ctl->pgcr[2], (1 << 13));
+#endif
 
 	/* clear credit value */
 	setbits_le32(&mctl_com->cccr, 1 << 31);
@@ -486,6 +575,6 @@ unsigned long sunxi_dram_init(void)
 	mctl_auto_detect_dram_size(&para);
 	mctl_set_cr(&para);
 
-	return (1 << (para.row_bits + 3)) * para.page_size *
+	return (1 << (para.row_bits + para.bank_bits)) * para.page_size *
 						(para.dual_rank ? 2 : 1);
 }
