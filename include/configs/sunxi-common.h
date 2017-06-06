@@ -79,14 +79,19 @@
 /* V3s do not have enough memory to place code at 0x4a000000 */
 #ifndef CONFIG_MACH_SUN8I_V3S
 #define CONFIG_SYS_TEXT_BASE		0x4a000000
-#else
-#define CONFIG_SYS_TEXT_BASE		0x42e00000
-#endif
 /* Note SPL_STACK_R_ADDR is set through Kconfig, we include it here 
  * since it needs to fit in with the other values. By also #defining it
  * we get warnings if the Kconfig value mismatches. */
 #define CONFIG_SPL_STACK_R_ADDR		0x4fe00000
 #define CONFIG_SPL_BSS_START_ADDR	0x4ff80000
+#else
+#define CONFIG_SYS_TEXT_BASE		0x42e00000
+/* Note SPL_STACK_R_ADDR is set through Kconfig, we include it here 
+ * since it needs to fit in with the other values. By also #defining it
+ * we get warnings if the Kconfig value mismatches. */
+#define CONFIG_SPL_STACK_R_ADDR		0x43e00000
+#define CONFIG_SPL_BSS_START_ADDR	0x43f80000
+#endif
 #endif
 
 #define CONFIG_SPL_BSS_MAX_SIZE		0x00080000 /* 512 KiB */
@@ -390,6 +395,7 @@ extern int soft_i2c_gpio_scl;
 #define SCRIPT_ADDR_R	__stringify(SDRAM_OFFSET(FC00000))
 #define PXEFILE_ADDR_R	__stringify(SDRAM_OFFSET(FD00000))
 #define RAMDISK_ADDR_R	__stringify(SDRAM_OFFSET(FE00000))
+#define BOOTM_SIZE_R    __stringify(A000000)
 
 #else
 /*
@@ -403,6 +409,7 @@ extern int soft_i2c_gpio_scl;
 #define SCRIPT_ADDR_R  __stringify(SDRAM_OFFSET(3100000))
 #define PXEFILE_ADDR_R __stringify(SDRAM_OFFSET(3200000))
 #define RAMDISK_ADDR_R __stringify(SDRAM_OFFSET(3300000))
+#define BOOTM_SIZE_R   __stringify(A000000)
 #else
 /*
  * 64M RAM minus 2MB heap + 16MB for u-boot, stack, fb, etc.
@@ -414,11 +421,12 @@ extern int soft_i2c_gpio_scl;
 #define SCRIPT_ADDR_R  __stringify(SDRAM_OFFSET(1900000))
 #define PXEFILE_ADDR_R __stringify(SDRAM_OFFSET(1A00000))
 #define RAMDISK_ADDR_R __stringify(SDRAM_OFFSET(1B00000))
+#define BOOTM_SIZE_R   __stringify(2E00000)
 #endif
 #endif
 
 #define MEM_LAYOUT_ENV_SETTINGS \
-	"bootm_size=0xa000000\0" \
+	"bootm_size=" BOOTM_SIZE_R "\0" \
 	"kernel_addr_r=" KERNEL_ADDR_R "\0" \
 	"fdt_addr_r=" FDT_ADDR_R "\0" \
 	"scriptaddr=" SCRIPT_ADDR_R "\0" \
